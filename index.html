@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Umbra: Conexão Visual</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        canvas { display: block; }
+        #counter {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="counter">ONLINE: <span id="count">1</span></div>
+    <canvas id="screen"></canvas>
+
+    <script>
+        const canvas = document.getElementById('screen');
+        const ctx = canvas.getContext('2d');
+        const countEl = document.getElementById('count');
+        
+        // Conectar ao seu servidor no Render ou Localhost
+        const socket = io('http://localhost:3000'); 
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let myMouse = { x: 0, y: 0 };
+        let otherUsers = {};
+        let activeLights = false;
+
+        // Configurações do Atrator
+        let a = 1.5, b = -1.8, c = 1.6, d = 0.9;
+        let pointsX = 0, pointsY = 0;
+
+        socket.on('updateCount', (count) => { countEl.innerText = count; });
+        socket.on('userPositions', (users) => { otherUsers = users; });
+
+        window.addEventListener('mousemove', (e) => {
+            myMouse.x = e.clientX;
+            myMouse.y = e.clientY;
+            socket.emit('mouseMove', { x: myMouse.x, y: myMouse.y });
+        });
+
+        function drawClifford(targetX, targetY) {
+            // Os parâmetros a e b são moldados pela posição do mouse
+            a = ((targetX / canvas.width) * 4) - 2;
+            b = ((targetY / canvas.height) * 4) - 2;
+
+            for (let i = 0; i < 500; i++) {
+                let oldX = pointsX;
+                let oldY = pointsY;
+                pointsX = Math.sin(a * oldY) + c * Math.cos(a * oldX);
+                pointsY = Math.sin(b * oldX) + d * Math.cos(b * oldY);
+
+                let plotX = (pointsX + 2.5) * (canvas.width / 5);
+                let plotY = (pointsY + 2.5) * (canvas.height / 5);
+
+                ctx.fillStyle = `rgba(0, 255, 204, 0.2)`;
+                ctx.fillRect(plotX, plotY, 1, 1);
+            }
+        }
+
+        function update() {
+            // Fade out suave para rastro
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            activeLights = false;
+
+            for (let id in otherUsers) {
+                if (id === socket.id) continue;
+
+                const user = otherUsers[id];
+                const dist = Math.hypot(myMouse.x - user.x, myMouse.y - user.y);
+
+                // Se um mouse estiver a menos de 150px de outro
+                if (dist < 150) {
+                    activeLights = true;
+                    drawClifford(user.x, user.y);
+                }
+            }
+
+            requestAnimationFrame(update);
+        }
+
+        update();
+    </script>
+</body>
+</html>
